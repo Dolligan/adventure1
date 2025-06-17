@@ -81,6 +81,70 @@
             min-height: 100%;
             padding: 2rem;
         }
+        .game-image {
+            width: 100%;
+            height: 250px; /* Fixed height for image area */
+            object-fit: cover; /* Cover the area, crop if needed */
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            background-color: #3182ce; /* Placeholder background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: #e2e8f0;
+            overflow: hidden; /* Ensures image respects border-radius */
+        }
+        .map-screen {
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            background-color: #2d3748;
+            border-radius: 0.75rem;
+            min-height: 500px; /* Ensure map screen has some height */
+        }
+        /* Styles for the automap visualization */
+        .map-display-container {
+            position: relative;
+            flex-grow: 1; /* Allows container to take available space */
+            overflow: auto; /* Enable scrolling if map exceeds container size */
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #4a5568; /* Slightly lighter background for map area */
+            border-radius: 0.5rem;
+            min-width: 100%; /* Ensure container handles initial content width */
+            min-height: 400px; /* Minimum height for the map visual */
+        }
+        .map-node {
+            position: absolute;
+            background-color: #2d3748; /* Darker background for node */
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            width: 160px; /* Fixed width for nodes */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            color: #e2e8f0;
+            text-align: center;
+            border: 2px solid transparent;
+            box-sizing: border-box; /* Include padding and border in width */
+            transition: all 0.3s ease; /* Smooth transition for location changes */
+        }
+        .map-node.current-location {
+            border-color: #f6e05e; /* Yellow border for current location */
+            box-shadow: 0 0 15px rgba(246, 224, 94, 0.5); /* Glowing effect */
+        }
+        .map-connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allows clicks to pass through to nodes */
+            z-index: 0; /* Ensures lines are behind nodes */
+        }
+        .map-locations-container {
+            position: relative;
+            z-index: 1; /* Ensures nodes are above lines */
+        }
     </style>
 </head>
 <body class="selection:bg-blue-300 selection:text-blue-900">
@@ -91,7 +155,13 @@
             <button id="startGameBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105">Start Your Adventure</button>
         </div>
 
+        <!-- Main Game Screen -->
         <div id="gameScreen" class="hidden">
+            <!-- Image display area -->
+            <div id="gameImageContainer" class="game-image">
+                <img id="currentImage" src="https://placehold.co/800x250/3182ce/ffffff?text=Fantasy+Realm" alt="Game Illustration" class="w-full h-full object-cover rounded-md" onerror="this.onerror=null;this.src='https://placehold.co/800x250/3182ce/ffffff?text=Image+Not+Found';">
+            </div>
+
             <div class="game-output text-gray-200 mb-4" id="gameOutput">
                 <!-- Game messages will appear here -->
             </div>
@@ -120,11 +190,24 @@
                 <button id="attackBtn" class="flex-grow" disabled>Attack</button>
                 <button id="takeItemBtn" class="flex-grow" disabled>Take Item</button>
                 <button id="useItemBtn" class="flex-grow" disabled>Use Item</button>
+                <button id="showMapBtn" class="flex-grow">Map</button> <!-- New Map button -->
             </div>
 
             <div id="navigationButtons" class="game-actions grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <!-- Navigation buttons will be dynamically added here -->
             </div>
+        </div>
+
+        <!-- Automap Screen -->
+        <div id="mapScreen" class="map-screen hidden">
+            <h1 class="text-4xl font-bold text-teal-400 mb-4 text-center">Automap</h1>
+            <div id="mapDisplayContainer" class="map-display-container">
+                <svg id="mapConnections" class="map-connections-svg"></svg>
+                <div id="mapLocations" class="map-locations-container">
+                    <!-- Map entries will be displayed here -->
+                </div>
+            </div>
+            <button id="backToGameBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105">Back to Game</button>
         </div>
     </div>
 
@@ -136,7 +219,8 @@
                 maxHealth: 100,
                 attack: 15,
                 inventory: [], // Stores item IDs
-                currentLocation: 'villageSquare'
+                currentLocation: 'villageSquare',
+                visitedLocations: {} // New: Stores visited locations for the map
             },
             // Define game locations, NPCs, monsters, and items
             locations: {
@@ -146,7 +230,9 @@
                     exits: { north: 'blacksmithShop', east: 'whisperingWoods', west: 'oldInn' },
                     npcs: ['elderThorne'],
                     monsters: [],
-                    items: []
+                    items: [],
+                    imageUrl: "https://placehold.co/800x250/2b6cb0/ffffff?text=Village+Square", // Location image
+                    mapX: 0, mapY: 0 // Map coordinates for visual layout
                 },
                 blacksmithShop: {
                     name: "Blacksmith's Shop",
@@ -154,7 +240,9 @@
                     exits: { south: 'villageSquare' },
                     npcs: ['grak'],
                     monsters: [],
-                    items: ['rustySword']
+                    items: ['rustySword'],
+                    imageUrl: "https://placehold.co/800x250/2f435e/ffffff?text=Blacksmith+Shop", // Location image
+                    mapX: 0, mapY: -1 // North of village
                 },
                 oldInn: {
                     name: "The Old Inn",
@@ -162,7 +250,9 @@
                     exits: { east: 'villageSquare' },
                     npcs: ['innkeeper'],
                     monsters: [],
-                    items: ['healingPotion']
+                    items: ['healingPotion'],
+                    imageUrl: "https://placehold.co/800x250/3e5270/ffffff?text=Old+Inn", // Location image
+                    mapX: -1, mapY: 0 // West of village
                 },
                 whisperingWoods: {
                     name: "Whispering Woods",
@@ -170,7 +260,9 @@
                     exits: { east: 'forestClearing', west: 'villageSquare' },
                     npcs: [],
                     monsters: ['goblin'],
-                    items: []
+                    items: [],
+                    imageUrl: "https://placehold.co/800x250/1c3144/ffffff?text=Whispering+Woods", // Location image
+                    mapX: 1, mapY: 0 // East of village
                 },
                 forestClearing: {
                     name: "Forest Clearing",
@@ -178,7 +270,9 @@
                     exits: { west: 'whisperingWoods' },
                     npcs: [],
                     monsters: ['direWolf'],
-                    items: ['ancientAmulet']
+                    items: ['ancientAmulet'],
+                    imageUrl: "https://placehold.co/800x250/4f5f6e/ffffff?text=Forest+Clearing", // Location image
+                    mapX: 2, mapY: 0 // East of woods
                 }
             },
             characters: { // NPCs
@@ -188,7 +282,8 @@
                         "Welcome, adventurer! Be wary of the Whispering Woods, dark creatures have been seen there.",
                         "If you seek strength, the Blacksmith Grak might help.",
                         "The Old Inn offers respite and stories."
-                    ]
+                    ],
+                    imageUrl: "https://placehold.co/200x200/5a67d8/ffffff?text=Elder+Thorne" // Character image
                 },
                 grak: {
                     name: "Grak the Blacksmith",
@@ -196,7 +291,8 @@
                         "Hmph. What do ye want, adventurer?",
                         "I can forge fine weapons, if ye have the coin.",
                         "Need a sword? Check the back, might have an old one lying around."
-                    ]
+                    ],
+                    imageUrl: "https://placehold.co/200x200/805ad5/ffffff?text=Grak" // Character image
                 },
                 innkeeper: {
                     name: "The Innkeeper",
@@ -204,7 +300,8 @@
                         "Greetings, weary traveler! A pint of ale, perhaps?",
                         "Many tales are told within these walls. Stay a while.",
                         "Healing potions are always good to have on hand."
-                    ]
+                    ],
+                    imageUrl: "https://placehold.co/200x200/a0aec0/ffffff?text=Innkeeper" // Character image
                 }
             },
             monsters: {
@@ -213,41 +310,48 @@
                     health: 30,
                     maxHealth: 30,
                     attack: 10,
-                    itemDrop: 'goldCoin'
+                    itemDrop: 'goldCoin',
+                    imageUrl: "https://placehold.co/200x200/e53e3e/ffffff?text=Goblin" // Monster image
                 },
                 direWolf: {
                     name: "Dire Wolf",
                     health: 50,
                     maxHealth: 50,
                     attack: 20,
-                    itemDrop: 'wolfPelt'
+                    itemDrop: 'wolfPelt',
+                    imageUrl: "https://placehold.co/200x200/c53030/ffffff?text=Dire+Wolf" // Monster image
                 }
             },
             items: {
                 rustySword: {
                     name: "Rusty Sword",
                     description: "A somewhat rusty, but still usable sword. (+5 Attack)",
-                    effect: { type: 'attack_boost', value: 5 }
+                    effect: { type: 'attack_boost', value: 5 },
+                    imageUrl: "https://placehold.co/100x100/f6ad55/ffffff?text=Sword" // Item image
                 },
                 healingPotion: {
                     name: "Healing Potion",
                     description: "A small vial filled with a glowing liquid. Heals 30 health.",
-                    effect: { type: 'heal', value: 30 }
+                    effect: { type: 'heal', value: 30 },
+                    imageUrl: "https://placehold.co/100x100/48bb78/ffffff?text=Potion" // Item image
                 },
                 goldCoin: {
                     name: "Gold Coin",
                     description: "A shiny gold coin. (No direct use, for quests later maybe!)",
-                    effect: null
+                    effect: null,
+                    imageUrl: "https://placehold.co/100x100/ecc94b/ffffff?text=Coin" // Item image
                 },
                 wolfPelt: {
                     name: "Wolf Pelt",
                     description: "The pelt of a dire wolf. Could be valuable. (No direct use)",
-                    effect: null
+                    effect: null,
+                    imageUrl: "https://placehold.co/100x100/a0aec0/ffffff?text=Pelt" // Item image
                 },
                 ancientAmulet: {
                     name: "Ancient Amulet",
                     description: "An ornate amulet pulsing with faint magic. (+10 Max Health)",
-                    effect: { type: 'max_health_boost', value: 10 }
+                    effect: { type: 'max_health_boost', value: 10 },
+                    imageUrl: "https://placehold.co/100x100/9f7aea/ffffff?text=Amulet" // Item image
                 }
             }
         };
@@ -256,12 +360,14 @@
         const startGameBtn = document.getElementById('startGameBtn');
         const startScreen = document.getElementById('startScreen');
         const gameScreen = document.getElementById('gameScreen');
+        const mapScreen = document.getElementById('mapScreen');
         const gameOutput = document.getElementById('gameOutput');
         const playerHealthBar = document.getElementById('playerHealthBar');
         const playerHealthText = document.getElementById('playerHealthText');
         const playerAttackText = document.getElementById('playerAttack');
         const currentLocationName = document.getElementById('currentLocationName');
         const inventoryList = document.getElementById('inventoryList');
+        const currentImage = document.getElementById('currentImage');
 
         const exploreBtn = document.getElementById('exploreBtn');
         const talkBtn = document.getElementById('talkBtn');
@@ -269,6 +375,13 @@
         const takeItemBtn = document.getElementById('takeItemBtn');
         const useItemBtn = document.getElementById('useItemBtn');
         const navigationButtonsDiv = document.getElementById('navigationButtons');
+        const showMapBtn = document.getElementById('showMapBtn');
+        const backToGameBtn = document.getElementById('backToGameBtn');
+
+        // New DOM elements for visual map
+        const mapDisplayContainer = document.getElementById('mapDisplayContainer');
+        const mapConnections = document.getElementById('mapConnections');
+        const mapLocations = document.getElementById('mapLocations');
 
         let currentMonster = null; // Tracks the monster during combat
 
@@ -281,6 +394,14 @@
         function displayMessage(message) {
             gameOutput.innerHTML += `<p>${message}</p>`;
             gameOutput.scrollTop = gameOutput.scrollHeight; // Scroll to bottom
+        }
+
+        /**
+         * Updates the main game illustration.
+         * @param {string} url The URL of the image to display.
+         */
+        function updateGameImage(url) {
+            currentImage.src = url;
         }
 
         /**
@@ -310,22 +431,33 @@
                     }
                 });
             }
-            // Enable/disable useItemBtn based on inventory content that has an effect
             const hasUsableItem = gameData.player.inventory.some(itemId => gameData.items[itemId] && gameData.items[itemId].effect);
             useItemBtn.disabled = !hasUsableItem;
         }
 
         /**
          * Renders the current location description and updates available actions.
+         * Also updates the automap data for the current location.
          */
         function renderLocation() {
             const location = gameData.locations[gameData.player.currentLocation];
             displayMessage(`--- ${location.name} ---`);
             displayMessage(location.description);
+            updateGameImage(location.imageUrl);
 
             // Update player stats and inventory
             updatePlayerStats();
             updateInventory();
+
+            // Automap: Update visited location data with current items
+            const currentItemsInLocation = location.items.map(itemId => gameData.items[itemId].name);
+            gameData.player.visitedLocations[gameData.player.currentLocation] = {
+                name: location.name,
+                exits: { ...location.exits }, // Copy exits
+                itemsCurrentlyHere: [...currentItemsInLocation], // Copy current items by name
+                mapX: location.mapX, // Store map coordinates
+                mapY: location.mapY
+            };
 
             // Clear previous navigation buttons
             navigationButtonsDiv.innerHTML = '';
@@ -375,9 +507,11 @@
                 if (npc) {
                     const randomDialogue = npc.dialogue[Math.floor(Math.random() * npc.dialogue.length)];
                     displayMessage(`${npc.name}: "${randomDialogue}"`);
+                    updateGameImage(npc.imageUrl);
                 }
             } else {
                 displayMessage("There's no one here to talk to.");
+                updateGameImage(location.imageUrl);
             }
         }
 
@@ -388,13 +522,15 @@
             const location = gameData.locations[gameData.player.currentLocation];
             if (location.monsters.length === 0) {
                 displayMessage("There are no monsters here to attack.");
+                updateGameImage(location.imageUrl);
                 return;
             }
 
             if (!currentMonster) {
-                const monsterId = location.monsters[0]; // Attack the first monster
-                currentMonster = { ...gameData.monsters[monsterId], id: monsterId }; // Copy monster data
+                const monsterId = location.monsters[0];
+                currentMonster = { ...gameData.monsters[monsterId], id: monsterId };
                 displayMessage(`You confront the ${currentMonster.name}!`);
+                updateGameImage(currentMonster.imageUrl);
             }
 
             // Player attacks
@@ -409,12 +545,12 @@
                     displayMessage(`You found a ${gameData.items[currentMonster.itemDrop].name}!`);
                     updateInventory();
                 }
-                // Remove monster from location
+                // Remove monster from location and update automap
                 location.monsters = location.monsters.filter(id => id !== currentMonster.id);
-                currentMonster = null; // Reset monster after defeat
-                attackBtn.disabled = true; // No more monsters to attack
+                renderLocation(); // Re-render to update map's item/monster list and image
+                currentMonster = null;
+                attackBtn.disabled = true;
                 displayMessage("The area is clear of that threat. You can now explore or pick up items.");
-                renderLocation(); // Re-render location to update buttons
                 return;
             }
 
@@ -429,6 +565,7 @@
                 displayMessage("You have been defeated! Game Over.");
                 displayMessage("Refresh the page to play again.");
                 disableAllButtons();
+                updateGameImage("https://placehold.co/800x250/000000/ffffff?text=GAME+OVER");
                 return;
             }
 
@@ -441,11 +578,17 @@
         function takeItem() {
             const location = gameData.locations[gameData.player.currentLocation];
             if (location.items.length > 0) {
-                const itemId = location.items.shift(); // Take the first item and remove it from the location
+                const itemId = location.items.shift();
                 gameData.player.inventory.push(itemId);
                 displayMessage(`You picked up the ${gameData.items[itemId].name}.`);
                 updateInventory();
-                takeItemBtn.disabled = location.items.length === 0; // Disable if no more items
+                takeItemBtn.disabled = location.items.length === 0;
+                updateGameImage(gameData.items[itemId].imageUrl);
+                
+                // Update automap for the current location after taking an item
+                renderLocation(); // This re-renders and updates the map entry for current location
+                
+                setTimeout(() => updateGameImage(location.imageUrl), 1500);
             } else {
                 displayMessage("There are no items here to take.");
             }
@@ -455,9 +598,6 @@
          * Allows the player to use an item from their inventory.
          */
         function useItem() {
-            // For simplicity, let the player choose which item to use.
-            // A more complex system would involve a UI to select items.
-            // For now, let's just make the first healing potion or attack boosting item usable.
             const usableItemIndex = gameData.player.inventory.findIndex(itemId =>
                 gameData.items[itemId] && gameData.items[itemId].effect &&
                 (gameData.items[itemId].effect.type === 'heal' || gameData.items[itemId].effect.type === 'attack_boost' || gameData.items[itemId].effect.type === 'max_health_boost')
@@ -468,6 +608,7 @@
                 const item = gameData.items[itemId];
 
                 displayMessage(`You used the ${item.name}.`);
+                updateGameImage(item.imageUrl);
 
                 if (item.effect.type === 'heal') {
                     gameData.player.health = Math.min(gameData.player.maxHealth, gameData.player.health + item.effect.value);
@@ -477,13 +618,14 @@
                     displayMessage(`Your attack increased by ${item.effect.value}.`);
                 } else if (item.effect.type === 'max_health_boost') {
                     gameData.player.maxHealth += item.effect.value;
-                    gameData.player.health += item.effect.value; // Also heal up to new max health
+                    gameData.player.health = Math.min(gameData.player.maxHealth, gameData.player.health + item.effect.value);
                     displayMessage(`Your max health increased by ${item.effect.value}!`);
                 }
 
-                gameData.player.inventory.splice(usableItemIndex, 1); // Remove item from inventory
+                gameData.player.inventory.splice(usableItemIndex, 1);
                 updatePlayerStats();
                 updateInventory();
+                setTimeout(() => updateGameImage(gameData.locations[gameData.player.currentLocation].imageUrl), 1500);
             } else {
                 displayMessage("You don't have any usable items in your inventory.");
             }
@@ -498,8 +640,144 @@
             attackBtn.disabled = true;
             takeItemBtn.disabled = true;
             useItemBtn.disabled = true;
+            showMapBtn.disabled = true;
             navigationButtonsDiv.querySelectorAll('button').forEach(btn => btn.disabled = true);
         }
+
+        /**
+         * Displays the automap screen and populates it.
+         */
+        function showMap() {
+            gameScreen.classList.add('hidden');
+            mapScreen.classList.remove('hidden');
+            renderMap();
+        }
+
+        /**
+         * Hides the automap screen and returns to the game screen.
+         */
+        function hideMap() {
+            mapScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            renderLocation(); // Re-render game screen to show current location correctly
+        }
+
+        /**
+         * Renders the map based on visited locations data, showing relative positions and connections.
+         */
+        function renderMap() {
+            mapLocations.innerHTML = ''; // Clear previous map nodes
+            mapConnections.innerHTML = ''; // Clear previous lines
+
+            const visitedLocationIds = Object.keys(gameData.player.visitedLocations);
+
+            if (visitedLocationIds.length === 0) {
+                mapLocations.innerHTML = '<p class="text-gray-300 text-center absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full">Explore the world to reveal the map!</p>';
+                return;
+            }
+
+            const nodeWidth = 160; // Fixed width for each location node
+            const nodeHeight = 80; // Estimated height for each location node (adjust based on content/padding)
+            const paddingX = 40; // Horizontal padding between nodes
+            const paddingY = 60; // Vertical padding between nodes
+
+            const cellSizeX = nodeWidth + paddingX;
+            const cellSizeY = nodeHeight + paddingY;
+
+            let minMapX = Infinity, maxMapX = -Infinity;
+            let minMapY = Infinity, maxMapY = -Infinity;
+
+            // First pass: Determine min/max map coordinates from visited locations
+            visitedLocationIds.forEach(locId => {
+                const locData = gameData.locations[locId];
+                if (locData && typeof locData.mapX === 'number' && typeof locData.mapY === 'number') {
+                    minMapX = Math.min(minMapX, locData.mapX);
+                    maxMapX = Math.max(maxMapX, locData.mapX);
+                    minMapY = Math.min(minMapY, locData.mapY);
+                    maxMapY = Math.max(maxMapY, locData.mapY);
+                }
+            });
+
+            // Calculate overall map dimensions
+            const totalMapWidth = (maxMapX - minMapX + 1) * cellSizeX;
+            const totalMapHeight = (maxMapY - minMapY + 1) * cellSizeY;
+
+            // Set the scrollable area's minimum size to fit the map
+            mapDisplayContainer.style.minWidth = `${totalMapWidth + 100}px`; // Add some extra space
+            mapDisplayContainer.style.minHeight = `${totalMapHeight + 100}px`; // Add some extra space
+
+            // Set the SVG dimensions to cover the whole potential map area
+            mapConnections.setAttribute('width', `${totalMapWidth + 100}`);
+            mapConnections.setAttribute('height', `${totalMapHeight + 100}`);
+            mapConnections.setAttribute('viewBox', `0 0 ${totalMapWidth + 100} ${totalMapHeight + 100}`);
+
+
+            // Calculate initial offset to ensure map starts near the top-left, not at negative coordinates
+            // This effectively shifts the entire coordinate system
+            const offsetX = -minMapX * cellSizeX + 50; // Shift by minX to start from 0, plus a margin
+            const offsetY = -minMapY * cellSizeY + 50; // Shift by minY to start from 0, plus a margin
+
+
+            // Second pass: Render nodes and draw connections
+            visitedLocationIds.forEach(locId => {
+                const visitedLocInfo = gameData.player.visitedLocations[locId];
+                const fullLocData = gameData.locations[locId];
+
+                if (!fullLocData) return;
+
+                // Create location node element
+                const node = document.createElement('div');
+                node.classList.add('map-node');
+                if (locId === gameData.player.currentLocation) {
+                    node.classList.add('current-location');
+                }
+
+                // Calculate node position on the map
+                const nodeVisualX = (fullLocData.mapX * cellSizeX) + offsetX;
+                const nodeVisualY = (fullLocData.mapY * cellSizeY) + offsetY;
+                node.style.left = `${nodeVisualX}px`;
+                node.style.top = `${nodeVisualY}px`;
+
+                let itemsText = 'No items';
+                if (visitedLocInfo.itemsCurrentlyHere && visitedLocInfo.itemsCurrentlyHere.length > 0) {
+                    itemsText = 'Items: ' + visitedLocInfo.itemsCurrentlyHere.join(', ');
+                }
+
+                node.innerHTML = `
+                    <h3 class="text-base font-semibold text-blue-300 mb-0">${visitedLocInfo.name}</h3>
+                    <p class="text-xs text-gray-400">${itemsText}</p>
+                `;
+                mapLocations.appendChild(node);
+
+                // Calculate center points for drawing lines
+                const currentNodeCenterX = nodeVisualX + (nodeWidth / 2);
+                const currentNodeCenterY = nodeVisualY + (nodeHeight / 2);
+
+                // Draw connections to adjacent visited locations
+                for (const exitDirection in fullLocData.exits) {
+                    const targetLocId = fullLocData.exits[exitDirection];
+                    if (gameData.player.visitedLocations[targetLocId]) { // Only draw line if target is also visited
+                        const targetLocData = gameData.locations[targetLocId];
+
+                        const targetNodeVisualX = (targetLocData.mapX * cellSizeX) + offsetX;
+                        const targetNodeVisualY = (targetLocData.mapY * cellSizeY) + offsetY;
+
+                        const targetNodeCenterX = targetNodeVisualX + (nodeWidth / 2);
+                        const targetNodeCenterY = targetNodeVisualY + (nodeHeight / 2);
+
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', currentNodeCenterX);
+                        line.setAttribute('y1', currentNodeCenterY);
+                        line.setAttribute('x2', targetNodeCenterX);
+                        line.setAttribute('y2', targetNodeCenterY);
+                        line.setAttribute('stroke', '#a0aec0'); // Gray line
+                        line.setAttribute('stroke-width', '2');
+                        mapConnections.appendChild(line);
+                    }
+                }
+            });
+        }
+
 
         // --- Event Listeners ---
         startGameBtn.addEventListener('click', () => {
@@ -509,8 +787,6 @@
         });
 
         exploreBtn.addEventListener('click', () => {
-            // Explore button will primarily trigger rendering the current location again
-            // and show available exits. Actual movement is via navigation buttons.
             displayMessage("You look around the area for anything new.");
             renderLocation();
         });
@@ -518,6 +794,8 @@
         attackBtn.addEventListener('click', attackMonster);
         takeItemBtn.addEventListener('click', takeItem);
         useItemBtn.addEventListener('click', useItem);
+        showMapBtn.addEventListener('click', showMap);
+        backToGameBtn.addEventListener('click', hideMap);
 
         // Initial setup for the game container to show the start screen
         document.addEventListener('DOMContentLoaded', () => {
