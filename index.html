@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantasy Realm Adventure</title>
+    <!-- Tailwind CSS for styling and responsiveness -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles go here */
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        .game-container {
+            background-color: #2d3748; /* Darker background for container */
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-width: 900px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Ensure rounded corners clip content */
+        }
+        .game-output {
+            background-color: #4a5568; /* Even darker for output area */
+            border-radius: 0.5rem;
+            padding: 1rem;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto; /* Scroll for long text */
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        .game-actions button {
+            background-color: #4299e1; /* Blue button */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .game-actions button:hover {
+            background-color: #3182ce; /* Darker blue on hover */
+            transform: translateY(-1px);
+        }
+        .game-actions button:active {
+            transform: translateY(1px);
+        }
+        .game-actions button:disabled {
+            background-color: #718096; /* Gray when disabled */
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .stat-bar {
+            background-color: #718096; /* Gray background for stat bars */
+            border-radius: 0.25rem;
+            height: 1rem;
+            overflow: hidden;
+        }
+        .health-fill {
+            background-color: #e53e3e; /* Red for health */
+            height: 100%;
+            transition: width 0.3s ease-in-out;
+        }
+        .start-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            min-height: 100%;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body class="selection:bg-blue-300 selection:text-blue-900">
+    <div id="game" class="game-container hidden p-4">
+        <div class="start-screen" id="startScreen">
+            <h1 class="text-4xl font-bold text-teal-400 mb-4">Fantasy Realm Adventure</h1>
+            <p class="text-lg text-gray-300 mb-8">Embark on a journey through a mystical world. Interact with characters, battle fearsome beasts, and uncover secrets!</p>
+            <button id="startGameBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105">Start Your Adventure</button>
+        </div>
+
+        <div id="gameScreen" class="hidden">
+            <div class="game-output text-gray-200 mb-4" id="gameOutput">
+                <!-- Game messages will appear here -->
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="p-4 bg-gray-700 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-2 text-blue-300">Player Stats</h2>
+                    <p class="text-lg">Health: <span id="playerHealthText"></span></p>
+                    <div class="w-full stat-bar">
+                        <div id="playerHealthBar" class="health-fill" style="width: 100%;"></div>
+                    </div>
+                    <p class="text-lg mt-2">Attack: <span id="playerAttack"></span></p>
+                    <p class="text-lg">Location: <span id="currentLocationName"></span></p>
+                </div>
+                <div class="p-4 bg-gray-700 rounded-lg shadow-md col-span-2">
+                    <h2 class="text-xl font-semibold mb-2 text-green-300">Inventory</h2>
+                    <ul id="inventoryList" class="list-disc list-inside text-gray-300">
+                        <!-- Inventory items will appear here -->
+                    </ul>
+                </div>
+            </div>
+
+            <div class="game-actions grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
+                <button id="exploreBtn" class="flex-grow">Explore</button>
+                <button id="talkBtn" class="flex-grow" disabled>Talk</button>
+                <button id="attackBtn" class="flex-grow" disabled>Attack</button>
+                <button id="takeItemBtn" class="flex-grow" disabled>Take Item</button>
+                <button id="useItemBtn" class="flex-grow" disabled>Use Item</button>
+            </div>
+
+            <div id="navigationButtons" class="game-actions grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                <!-- Navigation buttons will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game state variables
+        const gameData = {
+            player: {
+                health: 100,
+                maxHealth: 100,
+                attack: 15,
+                inventory: [], // Stores item IDs
+                currentLocation: 'villageSquare'
+            },
+            // Define game locations, NPCs, monsters, and items
+            locations: {
+                villageSquare: {
+                    name: "Village Square",
+                    description: "You are in the bustling village square. A fountain gurgles in the center. To the north is the Blacksmith's Shop, to the east is the Whispering Woods, and to the west is the Old Inn.",
+                    exits: { north: 'blacksmithShop', east: 'whisperingWoods', west: 'oldInn' },
+                    npcs: ['elderThorne'],
+                    monsters: [],
+                    items: []
+                },
+                blacksmithShop: {
+                    name: "Blacksmith's Shop",
+                    description: "The clang of hammer on steel echoes through this smoky shop. Large tools hang on the walls. The blacksmith, Grak, is at his forge. The village square is to the south.",
+                    exits: { south: 'villageSquare' },
+                    npcs: ['grak'],
+                    monsters: [],
+                    items: ['rustySword']
+                },
+                oldInn: {
+                    name: "The Old Inn",
+                    description: "A cozy inn with a roaring fireplace. The scent of ale and roasted meat fills the air. A few patrons are scattered about. The village square is to the east.",
+                    exits: { east: 'villageSquare' },
+                    npcs: ['innkeeper'],
+                    monsters: [],
+                    items: ['healingPotion']
+                },
+                whisperingWoods: {
+                    name: "Whispering Woods",
+                    description: "Tall, ancient trees loom overhead, their leaves rustling ominously. A narrow path leads deeper into the woods to the east. The village square is to the west.",
+                    exits: { east: 'forestClearing', west: 'villageSquare' },
+                    npcs: [],
+                    monsters: ['goblin'],
+                    items: []
+                },
+                forestClearing: {
+                    name: "Forest Clearing",
+                    description: "A small clearing bathed in sunlight. Strange flowers bloom here. A menacing shadow lurks near a fallen log. The whispering woods are to the west.",
+                    exits: { west: 'whisperingWoods' },
+                    npcs: [],
+                    monsters: ['direWolf'],
+                    items: ['ancientAmulet']
+                }
+            },
+            characters: { // NPCs
+                elderThorne: {
+                    name: "Elder Thorne",
+                    dialogue: [
+                        "Welcome, adventurer! Be wary of the Whispering Woods, dark creatures have been seen there.",
+                        "If you seek strength, the Blacksmith Grak might help.",
+                        "The Old Inn offers respite and stories."
+                    ]
+                },
+                grak: {
+                    name: "Grak the Blacksmith",
+                    dialogue: [
+                        "Hmph. What do ye want, adventurer?",
+                        "I can forge fine weapons, if ye have the coin.",
+                        "Need a sword? Check the back, might have an old one lying around."
+                    ]
+                },
+                innkeeper: {
+                    name: "The Innkeeper",
+                    dialogue: [
+                        "Greetings, weary traveler! A pint of ale, perhaps?",
+                        "Many tales are told within these walls. Stay a while.",
+                        "Healing potions are always good to have on hand."
+                    ]
+                }
+            },
+            monsters: {
+                goblin: {
+                    name: "Goblin",
+                    health: 30,
+                    maxHealth: 30,
+                    attack: 10,
+                    itemDrop: 'goldCoin'
+                },
+                direWolf: {
+                    name: "Dire Wolf",
+                    health: 50,
+                    maxHealth: 50,
+                    attack: 20,
+                    itemDrop: 'wolfPelt'
+                }
+            },
+            items: {
+                rustySword: {
+                    name: "Rusty Sword",
+                    description: "A somewhat rusty, but still usable sword. (+5 Attack)",
+                    effect: { type: 'attack_boost', value: 5 }
+                },
+                healingPotion: {
+                    name: "Healing Potion",
+                    description: "A small vial filled with a glowing liquid. Heals 30 health.",
+                    effect: { type: 'heal', value: 30 }
+                },
+                goldCoin: {
+                    name: "Gold Coin",
+                    description: "A shiny gold coin. (No direct use, for quests later maybe!)",
+                    effect: null
+                },
+                wolfPelt: {
+                    name: "Wolf Pelt",
+                    description: "The pelt of a dire wolf. Could be valuable. (No direct use)",
+                    effect: null
+                },
+                ancientAmulet: {
+                    name: "Ancient Amulet",
+                    description: "An ornate amulet pulsing with faint magic. (+10 Max Health)",
+                    effect: { type: 'max_health_boost', value: 10 }
+                }
+            }
+        };
+
+        // DOM Elements
+        const startGameBtn = document.getElementById('startGameBtn');
+        const startScreen = document.getElementById('startScreen');
+        const gameScreen = document.getElementById('gameScreen');
+        const gameOutput = document.getElementById('gameOutput');
+        const playerHealthBar = document.getElementById('playerHealthBar');
+        const playerHealthText = document.getElementById('playerHealthText');
+        const playerAttackText = document.getElementById('playerAttack');
+        const currentLocationName = document.getElementById('currentLocationName');
+        const inventoryList = document.getElementById('inventoryList');
+
+        const exploreBtn = document.getElementById('exploreBtn');
+        const talkBtn = document.getElementById('talkBtn');
+        const attackBtn = document.getElementById('attackBtn');
+        const takeItemBtn = document.getElementById('takeItemBtn');
+        const useItemBtn = document.getElementById('useItemBtn');
+        const navigationButtonsDiv = document.getElementById('navigationButtons');
+
+        let currentMonster = null; // Tracks the monster during combat
+
+        // --- Game Functions ---
+
+        /**
+         * Appends a message to the game output area.
+         * @param {string} message The message to display.
+         */
+        function displayMessage(message) {
+            gameOutput.innerHTML += `<p>${message}</p>`;
+            gameOutput.scrollTop = gameOutput.scrollHeight; // Scroll to bottom
+        }
+
+        /**
+         * Updates the player's stats display.
+         */
+        function updatePlayerStats() {
+            playerHealthText.textContent = `${gameData.player.health}/${gameData.player.maxHealth}`;
+            playerHealthBar.style.width = `${(gameData.player.health / gameData.player.maxHealth) * 100}%`;
+            playerAttackText.textContent = gameData.player.attack;
+            currentLocationName.textContent = gameData.locations[gameData.player.currentLocation].name;
+        }
+
+        /**
+         * Updates the inventory display.
+         */
+        function updateInventory() {
+            inventoryList.innerHTML = '';
+            if (gameData.player.inventory.length === 0) {
+                inventoryList.innerHTML = '<li class="text-gray-400">Inventory is empty.</li>';
+            } else {
+                gameData.player.inventory.forEach(itemId => {
+                    const item = gameData.items[itemId];
+                    if (item) {
+                        const li = document.createElement('li');
+                        li.textContent = `${item.name} - ${item.description}`;
+                        inventoryList.appendChild(li);
+                    }
+                });
+            }
+            // Enable/disable useItemBtn based on inventory content that has an effect
+            const hasUsableItem = gameData.player.inventory.some(itemId => gameData.items[itemId] && gameData.items[itemId].effect);
+            useItemBtn.disabled = !hasUsableItem;
+        }
+
+        /**
+         * Renders the current location description and updates available actions.
+         */
+        function renderLocation() {
+            const location = gameData.locations[gameData.player.currentLocation];
+            displayMessage(`--- ${location.name} ---`);
+            displayMessage(location.description);
+
+            // Update player stats and inventory
+            updatePlayerStats();
+            updateInventory();
+
+            // Clear previous navigation buttons
+            navigationButtonsDiv.innerHTML = '';
+
+            // Add navigation buttons based on exits
+            for (const direction in location.exits) {
+                const button = document.createElement('button');
+                button.textContent = `Go ${direction.charAt(0).toUpperCase() + direction.slice(1)}`;
+                button.onclick = () => movePlayer(direction);
+                navigationButtonsDiv.appendChild(button);
+            }
+
+            // Enable/disable action buttons based on location content
+            talkBtn.disabled = location.npcs.length === 0;
+            attackBtn.disabled = location.monsters.length === 0;
+            takeItemBtn.disabled = location.items.length === 0;
+
+            // Reset current monster when changing location
+            currentMonster = null;
+        }
+
+        /**
+         * Handles player movement to a new location.
+         * @param {string} direction The direction to move (e.g., 'north').
+         */
+        function movePlayer(direction) {
+            const currentLocation = gameData.locations[gameData.player.currentLocation];
+            const nextLocationId = currentLocation.exits[direction];
+
+            if (nextLocationId && gameData.locations[nextLocationId]) {
+                gameData.player.currentLocation = nextLocationId;
+                displayMessage(`You head ${direction}.`);
+                renderLocation();
+            } else {
+                displayMessage("You can't go that way.");
+            }
+        }
+
+        /**
+         * Initiates interaction with NPCs in the current location.
+         */
+        function talkToNPC() {
+            const location = gameData.locations[gameData.player.currentLocation];
+            if (location.npcs.length > 0) {
+                const npcId = location.npcs[0]; // For simplicity, talk to the first NPC
+                const npc = gameData.characters[npcId];
+                if (npc) {
+                    const randomDialogue = npc.dialogue[Math.floor(Math.random() * npc.dialogue.length)];
+                    displayMessage(`${npc.name}: "${randomDialogue}"`);
+                }
+            } else {
+                displayMessage("There's no one here to talk to.");
+            }
+        }
+
+        /**
+         * Initiates combat with a monster in the current location.
+         */
+        function attackMonster() {
+            const location = gameData.locations[gameData.player.currentLocation];
+            if (location.monsters.length === 0) {
+                displayMessage("There are no monsters here to attack.");
+                return;
+            }
+
+            if (!currentMonster) {
+                const monsterId = location.monsters[0]; // Attack the first monster
+                currentMonster = { ...gameData.monsters[monsterId], id: monsterId }; // Copy monster data
+                displayMessage(`You confront the ${currentMonster.name}!`);
+            }
+
+            // Player attacks
+            const playerDamage = gameData.player.attack;
+            currentMonster.health -= playerDamage;
+            displayMessage(`You strike the ${currentMonster.name} for ${playerDamage} damage!`);
+
+            if (currentMonster.health <= 0) {
+                displayMessage(`The ${currentMonster.name} is defeated!`);
+                if (currentMonster.itemDrop) {
+                    gameData.player.inventory.push(currentMonster.itemDrop);
+                    displayMessage(`You found a ${gameData.items[currentMonster.itemDrop].name}!`);
+                    updateInventory();
+                }
+                // Remove monster from location
+                location.monsters = location.monsters.filter(id => id !== currentMonster.id);
+                currentMonster = null; // Reset monster after defeat
+                attackBtn.disabled = true; // No more monsters to attack
+                displayMessage("The area is clear of that threat. You can now explore or pick up items.");
+                renderLocation(); // Re-render location to update buttons
+                return;
+            }
+
+            // Monster attacks back
+            const monsterDamage = currentMonster.attack;
+            gameData.player.health -= monsterDamage;
+            displayMessage(`The ${currentMonster.name} retaliates, dealing ${monsterDamage} damage to you!`);
+
+            updatePlayerStats();
+
+            if (gameData.player.health <= 0) {
+                displayMessage("You have been defeated! Game Over.");
+                displayMessage("Refresh the page to play again.");
+                disableAllButtons();
+                return;
+            }
+
+            displayMessage(`Your health: ${gameData.player.health}/${gameData.player.maxHealth}. ${currentMonster.name} health: ${currentMonster.health}/${currentMonster.maxHealth}.`);
+        }
+
+        /**
+         * Allows the player to take an item from the current location.
+         */
+        function takeItem() {
+            const location = gameData.locations[gameData.player.currentLocation];
+            if (location.items.length > 0) {
+                const itemId = location.items.shift(); // Take the first item and remove it from the location
+                gameData.player.inventory.push(itemId);
+                displayMessage(`You picked up the ${gameData.items[itemId].name}.`);
+                updateInventory();
+                takeItemBtn.disabled = location.items.length === 0; // Disable if no more items
+            } else {
+                displayMessage("There are no items here to take.");
+            }
+        }
+
+        /**
+         * Allows the player to use an item from their inventory.
+         */
+        function useItem() {
+            // For simplicity, let the player choose which item to use.
+            // A more complex system would involve a UI to select items.
+            // For now, let's just make the first healing potion or attack boosting item usable.
+            const usableItemIndex = gameData.player.inventory.findIndex(itemId =>
+                gameData.items[itemId] && gameData.items[itemId].effect &&
+                (gameData.items[itemId].effect.type === 'heal' || gameData.items[itemId].effect.type === 'attack_boost' || gameData.items[itemId].effect.type === 'max_health_boost')
+            );
+
+            if (usableItemIndex !== -1) {
+                const itemId = gameData.player.inventory[usableItemIndex];
+                const item = gameData.items[itemId];
+
+                displayMessage(`You used the ${item.name}.`);
+
+                if (item.effect.type === 'heal') {
+                    gameData.player.health = Math.min(gameData.player.maxHealth, gameData.player.health + item.effect.value);
+                    displayMessage(`You healed ${item.effect.value} health.`);
+                } else if (item.effect.type === 'attack_boost') {
+                    gameData.player.attack += item.effect.value;
+                    displayMessage(`Your attack increased by ${item.effect.value}.`);
+                } else if (item.effect.type === 'max_health_boost') {
+                    gameData.player.maxHealth += item.effect.value;
+                    gameData.player.health += item.effect.value; // Also heal up to new max health
+                    displayMessage(`Your max health increased by ${item.effect.value}!`);
+                }
+
+                gameData.player.inventory.splice(usableItemIndex, 1); // Remove item from inventory
+                updatePlayerStats();
+                updateInventory();
+            } else {
+                displayMessage("You don't have any usable items in your inventory.");
+            }
+        }
+
+        /**
+         * Disables all action buttons. Used when game is over.
+         */
+        function disableAllButtons() {
+            exploreBtn.disabled = true;
+            talkBtn.disabled = true;
+            attackBtn.disabled = true;
+            takeItemBtn.disabled = true;
+            useItemBtn.disabled = true;
+            navigationButtonsDiv.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        }
+
+        // --- Event Listeners ---
+        startGameBtn.addEventListener('click', () => {
+            startScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            renderLocation(); // Start the game in the initial location
+        });
+
+        exploreBtn.addEventListener('click', () => {
+            // Explore button will primarily trigger rendering the current location again
+            // and show available exits. Actual movement is via navigation buttons.
+            displayMessage("You look around the area for anything new.");
+            renderLocation();
+        });
+        talkBtn.addEventListener('click', talkToNPC);
+        attackBtn.addEventListener('click', attackMonster);
+        takeItemBtn.addEventListener('click', takeItem);
+        useItemBtn.addEventListener('click', useItem);
+
+        // Initial setup for the game container to show the start screen
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('game').classList.remove('hidden');
+        });
+
+    </script>
+</body>
+</html>
